@@ -1,0 +1,36 @@
+# Environment variables
+.env
+
+# Logs
+*.log
+app.log
+startup.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Gradio cache
+gradio_cached_examples/
+
+# Data files - checkpoints and outputs
+rugby_data_checkpoints/
+rugby_data_output/
+
+# Debug files
+debug_*.py
+test_*.py
+*.json
+!requirements.txt
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
