@@ -201,8 +201,78 @@ def get_sport_event_lineups(sport_event_id: str) -> Dict:
     else:
         return {}
 
+def get_season_players(season_id: str) -> Dict:
+    """Get all players participating in a season"""
+    url = f"{BASE_URL}/seasons/{season_id}/players.json"
+    update_progress("Fetching season players...")
+    resp = safe_api_call(url, {"api_key": API_KEY})
+    
+    if resp and resp.status_code == 200:
+        return resp.json()
+    else:
+        update_progress(f"Error getting season players: {resp.status_code if resp else 'Network error'}")
+        return {}
+
+def get_season_lineups(season_id: str) -> Dict:
+    """Get all match lineups for a season"""
+    url = f"{BASE_URL}/seasons/{season_id}/lineups.json"
+    update_progress("Fetching season lineups...")
+    resp = safe_api_call(url, {"api_key": API_KEY})
+    
+    if resp and resp.status_code == 200:
+        return resp.json()
+    else:
+        update_progress(f"Error getting season lineups: {resp.status_code if resp else 'Network error'}")
+        return {}
+
+def extract_players_from_season_lineups(season_id: str, competitor_id: str) -> Set[str]:
+    """Extract player IDs who actually played using the season lineups endpoint"""
+    player_ids = set()
+    
+    # Try to get all lineups for the season at once
+    season_lineups = get_season_lineups(season_id)
+    if season_lineups and 'lineups' in season_lineups:
+        lineups_list = season_lineups.get('lineups', [])
+        update_progress(f"Found {len(lineups_list)} matches with lineup data")
+        
+        matches_found = 0
+        for match_lineup in lineups_list:
+            if 'lineups' in match_lineup:
+                match_lineups = match_lineup['lineups']
+                competitors_lineups = match_lineups.get('competitors', [])
+                
+                for comp_lineup in competitors_lineups:
+                    if comp_lineup.get('id') == competitor_id:
+                        matches_found += 1
+                        players = comp_lineup.get('players', [])
+                        players_who_played = 0
+                        
+                        for player in players:
+                            # Only include players who actually played
+                            if player.get('played') == True:
+                                player_id = player.get('id')
+                                if player_id:
+                                    player_ids.add(player_id)
+                                    players_who_played += 1
+                        
+                        update_progress(f"Match {matches_found}: {players_who_played} players participated")
+                        break
+        
+        update_progress(f"Found {len(player_ids)} unique players across {matches_found} matches")
+        return player_ids
+    
+    # If season lineups endpoint fails, return empty set
+    update_progress("Season lineups not available, falling back to match-by-match approach")
+    return player_ids
+
 def extract_players_from_matches(season_id: str, competitor_id: str) -> Set[str]:
     """Extract player IDs who actually played in the season for a specific team"""
+    # First try the efficient season lineups approach
+    player_ids = extract_players_from_season_lineups(season_id, competitor_id)
+    if player_ids:
+        return player_ids
+    
+    # Fall back to the original match-by-match approach
     player_ids = set()
     
     # Get season summaries which contain match statistics
