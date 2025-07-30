@@ -14,6 +14,8 @@ A professional, modular web application for fetching and analyzing rugby player 
   - Handles different API data structures across seasons
 - **📁 Export & Import**: Save/load data as JSON with comprehensive metadata
 - **🔍 Interactive Data Visualization**: Explore player data with filtering and search
+- **🎨 Optimized UI**: Lazy loading, meaningful progress messages, and clear status updates
+- **📈 Real-time Progress**: Detailed step-by-step progress tracking with refresh capability
 
 ## 🏗️ Architecture
 
@@ -81,17 +83,31 @@ python main.py --no-browser
 ```
 
 ### 4. Use the Web Interface
-1. **Fetch Data Tab**: Select competitions/seasons and fetch player data
-2. **View Data Tab**: Load and explore previously saved data
+1. **Fetch Data Tab**: 
+   - Click "Load Competitions" to start
+   - Select competition and season
+   - Enable "Filter by actual participation" for match players only
+   - Click "Fetch Player Data" and monitor progress
+   - Use "Refresh" button to update progress status
+2. **View Data Tab**: 
+   - Load latest data or upload JSON file
+   - Select teams to view player details
+   - Export filtered data as needed
 
 ## 📖 Usage Guide
 
 ### Fetching Data
-1. Select a competition (e.g., "The Rugby Championship")
-2. Choose a season (e.g., "2022")
-3. Enable "Filter by actual participation" for accurate data
-4. Click "Fetch Player Data"
-5. Monitor progress and download results when complete
+1. Click "Load Competitions" to populate the dropdown
+2. Select a competition (e.g., "The Rugby Championship")
+3. Choose a season (e.g., "2022")
+4. Enable "Filter by actual participation" for accurate data
+5. Click "Fetch Player Data"
+6. Monitor detailed progress messages showing:
+   - Which teams are being processed
+   - Number of players found per team
+   - Data saving status
+7. Click "Refresh" button to update progress during fetch
+8. Download results when complete
 
 ### Viewing Data
 1. Use "Load Latest Data" or upload a JSON file
@@ -163,11 +179,20 @@ The application can be configured via:
 3. **UI components**: Modify `rugby_app/ui/gradio_interface.py`
 4. **Utilities**: Add to `rugby_app/utils/`
 
+## 🚨 Recent Updates (July 2025)
+
+- **Improved UI Performance**: Fixed initialization hang with lazy loading approach
+- **Enhanced Progress Tracking**: Added detailed step-by-step progress messages
+- **Better Error Messages**: Clear, actionable error descriptions
+- **Manual Refresh**: Added refresh button for progress updates
+- **Proper Table Headers**: Results table shows meaningful column names even when empty
+
 ## ⚠️ Known Limitations
 
 - **Historical Data**: Sportradar API may not provide historically accurate lineups for older seasons (pre-2020)
 - **Rate Limits**: API has request limits; application handles this with delays and retries
 - **Data Availability**: Some competitions/seasons may have limited player statistics
+- **Auto-refresh**: Removed due to Gradio compatibility; use manual refresh button instead
 
 ## 🆘 Troubleshooting
 
