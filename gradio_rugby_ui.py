@@ -248,8 +248,9 @@ def extract_players_from_season_lineups(season_id: str, competitor_id: str) -> S
                         players_who_played = 0
                         
                         for player in players:
-                            # Only include players who actually played
-                            if player.get('played') == True:
+                            # Include players who played (played=true) or don't have the field (likely substitutes who played)
+                            # Only exclude if explicitly played=false
+                            if player.get('played', True) != False:
                                 player_id = player.get('id')
                                 if player_id:
                                     player_ids.add(player_id)
@@ -265,15 +266,110 @@ def extract_players_from_season_lineups(season_id: str, competitor_id: str) -> S
     update_progress("Season lineups not available, falling back to match-by-match approach")
     return player_ids
 
-def extract_players_from_matches(season_id: str, competitor_id: str) -> Set[str]:
-    """Extract player IDs who actually played in the season for a specific team"""
-    # First try the efficient season lineups approach
-    player_ids = extract_players_from_season_lineups(season_id, competitor_id)
-    if player_ids:
-        return player_ids
+def build_player_list_from_matches(season_id: str, competitor_id: str) -> List[Dict]:
+    """Build complete player list from match data instead of filtering roster"""
+    players_dict = {}  # Use dict to store player data by ID
     
-    # Fall back to the original match-by-match approach
-    player_ids = set()
+    # First try the efficient season lineups approach
+    season_lineups = get_season_lineups(season_id)
+    if season_lineups and 'lineups' in season_lineups:
+        lineups_list = season_lineups.get('lineups', [])
+        update_progress(f"Building player list from {len(lineups_list)} matches")
+        
+        matches_processed = 0
+        for match_data in lineups_list:
+            # Each entry has sport_event, sport_event_status, and lineups
+            if 'lineups' in match_data and 'competitors' in match_data['lineups']:
+                competitors_lineups = match_data['lineups']['competitors']
+                
+                for comp_lineup in competitors_lineups:
+                    if comp_lineup.get('id') == competitor_id:
+                        matches_processed += 1
+                        players = comp_lineup.get('players', [])
+                        
+                        for player in players:
+                            # Include players who played (played=true) or don't have the field
+                            if player.get('played', True) != False:
+                                player_id = player.get('id')
+                                if player_id and player_id not in players_dict:
+                                    # Store the full player data
+                                    players_dict[player_id] = {
+                                        'id': player_id,
+                                        'name': player.get('name', 'Unknown'),
+                                        'type': player.get('type', 'Unknown'),
+                                        'jersey_number': player.get('jersey_number', 0),
+                                        'date_of_birth': player.get('date_of_birth', ''),
+                                        'nationality': player.get('nationality', ''),
+                                        'height': player.get('height', 0),
+                                        'weight': player.get('weight', 0)
+                                    }
+                        break
+        
+        update_progress(f"Found {len(players_dict)} unique players from {matches_processed} matches")
+        return list(players_dict.values())
+    
+    # Fall back to match-by-match approach if season lineups fails
+    return build_player_list_from_individual_matches(season_id, competitor_id)
+
+def build_player_list_from_individual_matches(season_id: str, competitor_id: str) -> List[Dict]:
+    """Build player list by checking individual matches"""
+    players_dict = {}
+    
+    # Get season summaries
+    summaries = get_season_summaries(season_id)
+    if not summaries:
+        return []
+    
+    summaries_list = summaries.get('summaries', [])
+    update_progress(f"Checking individual matches (found {len(summaries_list)} total)")
+    
+    matches_processed = 0
+    for summary in summaries_list:
+        sport_event = summary.get('sport_event', {})
+        competitors = sport_event.get('competitors', [])
+        
+        # Check if our team played
+        team_in_match = any(comp.get('id') == competitor_id for comp in competitors)
+        
+        if team_in_match:
+            sport_event_id = sport_event.get('id')
+            if sport_event_id:
+                # Get lineup for this specific match
+                lineup_data = get_sport_event_lineups(sport_event_id)
+                if lineup_data and 'lineups' in lineup_data:
+                    lineups = lineup_data['lineups']
+                    comp_lineups = lineups.get('competitors', [])
+                    
+                    for comp_lineup in comp_lineups:
+                        if comp_lineup.get('id') == competitor_id:
+                            matches_processed += 1
+                            players = comp_lineup.get('players', [])
+                            
+                            for player in players:
+                                if player.get('played', True) != False:
+                                    player_id = player.get('id')
+                                    if player_id and player_id not in players_dict:
+                                        players_dict[player_id] = {
+                                            'id': player_id,
+                                            'name': player.get('name', 'Unknown'),
+                                            'type': player.get('type', 'Unknown'),
+                                            'jersey_number': player.get('jersey_number', 0),
+                                            'date_of_birth': player.get('date_of_birth', ''),
+                                            'nationality': player.get('nationality', ''),
+                                            'height': player.get('height', 0),
+                                            'weight': player.get('weight', 0)
+                                        }
+                            
+                            update_progress(f"Match {matches_processed}: Added {len(players)} players")
+                            break
+    
+    update_progress(f"Built list of {len(players_dict)} unique players from {matches_processed} matches")
+    return list(players_dict.values())
+
+def extract_players_from_matches(season_id: str, competitor_id: str) -> Set[str]:
+    """Legacy function - just returns player IDs for backward compatibility"""
+    players = build_player_list_from_matches(season_id, competitor_id)
+    return {p['id'] for p in players}
     
     # Get season summaries which contain match statistics
     summaries = get_season_summaries(season_id)
@@ -365,8 +461,9 @@ def extract_players_from_matches(season_id: str, competitor_id: str) -> Set[str]
                                     players = comp_lineup.get('players', [])
                                     players_who_played = 0
                                     for player in players:
-                                        # Only include players who actually played
-                                        if player.get('played') == True:
+                                        # Include players who played (played=true) or don't have the field (likely substitutes who played)
+                                        # Only exclude if explicitly played=false
+                                        if player.get('played', True) != False:
                                             player_id = player.get('id')
                                             if player_id:
                                                 player_ids.add(player_id)
@@ -492,29 +589,31 @@ def fetch_rugby_data_threaded(competition_id: str, season_id: str, filter_by_par
         update_progress(f"[{i+1}/{len(competitors)}] Fetching {comp_name} ({comp_abbr})...")
         
         if comp_id:
-            profile = get_competitor_profile(comp_id)
-            
-            # Extract players
-            players = profile.get('players', [])
-            if not players and 'competitor' in profile:
-                players = profile.get('competitor', {}).get('players', [])
+            if filter_by_participation:
+                # Build player list directly from match data
+                update_progress(f"Building player list from matches for {comp_name}...")
+                players = build_player_list_from_matches(season_id, comp_id)
+                
+                if players:
+                    update_progress(f"Built list of {len(players)} players who actually played for {comp_name}")
+                else:
+                    update_progress(f"No match data found for {comp_name}, fetching full roster...")
+                    # Fall back to full roster if no match data
+                    profile = get_competitor_profile(comp_id)
+                    players = profile.get('players', [])
+                    if not players and 'competitor' in profile:
+                        players = profile.get('competitor', {}).get('players', [])
+            else:
+                # Get full roster from profile
+                profile = get_competitor_profile(comp_id)
+                players = profile.get('players', [])
+                if not players and 'competitor' in profile:
+                    players = profile.get('competitor', {}).get('players', [])
+                
+                if players:
+                    update_progress(f"Found {len(players)} players in roster for {comp_name}")
             
             if players:
-                update_progress(f"Found {len(players)} players for {comp_name}")
-                
-                # Filter by actual participation if requested
-                if filter_by_participation:
-                    update_progress(f"Filtering players who actually played for {comp_name}...")
-                    participated_player_ids = extract_players_from_matches(season_id, comp_id)
-                    
-                    if participated_player_ids:
-                        # Filter players to only those who participated
-                        original_count = len(players)
-                        players = [p for p in players if p.get('id') in participated_player_ids]
-                        update_progress(f"Filtered from {original_count} to {len(players)} players who actually played")
-                    else:
-                        update_progress(f"Could not determine participated players, using full roster")
-                
                 total_players += len(players)
                 
                 # Count positions
@@ -540,8 +639,21 @@ def fetch_rugby_data_threaded(competition_id: str, season_id: str, filter_by_par
                 checkpoint.completed_teams.add(comp_id)
                 checkpoint.save()
             else:
-                update_progress(f"No players found for {comp_name}")
-                # Still mark as completed to avoid retrying
+                update_progress(f"No players found for {comp_name}, including team with empty roster")
+                # Still include the team in results with empty player list
+                team_data = {
+                    'team': comp_name,
+                    'team_id': comp_id,
+                    'abbreviation': comp_abbr,
+                    'player_count': 0,
+                    'position_summary': {},
+                    'players': [],
+                    'filtered_by_participation': filter_by_participation,
+                    'error': 'Could not fetch player data'
+                }
+                
+                all_teams_data.append(team_data)
+                checkpoint.all_teams_data = all_teams_data
                 checkpoint.completed_teams.add(comp_id)
                 checkpoint.save()
     
